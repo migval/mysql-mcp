@@ -1,8 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import mysql from 'mysql2/promise';
-
-let connectionPool = null;
+import { z } from 'zod';
 
 function createConnectionPool(config = {}) {
     const defaultConfig = {
@@ -11,77 +10,21 @@ function createConnectionPool(config = {}) {
         user: process.env.DB_USER || 'root',
         password: process.env.DB_PASSWORD || '',
         database: process.env.DB_NAME || 'test',
-        charset: 'utf8mb4',
-        timezone: '+00:00',
         connectionLimit: 10,
-        acquireTimeout: 60000,
-        timeout: 60000,
-        reconnect: true
     };
 
     const poolConfig = { ...defaultConfig, ...config };
     
     try {
-        connectionPool = mysql.createPool(poolConfig);
-        console.log('MySQL connection pool created successfully');
-        return connectionPool;
+        return  mysql.createPool(poolConfig);
     } catch (error) {
         console.error('Error creating MySQL connection pool:', error.message);
         throw error;
     }
 }
 
-async function getConnection() {
-    if (!connectionPool) {
-        createConnectionPool();
-    }
-    
-    try {
-        const connection = await connectionPool.getConnection();
-        console.log('Database connection acquired from pool');
-        return connection;
-    } catch (error) {
-        console.error('Error getting connection from pool:', error.message);
-        throw error;
-    }
-}
+const connectionPool = createConnectionPool();
 
-async function executeQuery(sql, params = []) {
-    const connection = await getConnection();
-    try {
-        const [results] = await connection.execute(sql, params);
-        return results;
-    } catch (error) {
-        console.error('Error executing query:', error.message);
-        throw error;
-    } finally {
-        connection.release();
-    }
-}
-
-async function closeConnectionPool() {
-    if (connectionPool) {
-        try {
-            await connectionPool.end();
-            connectionPool = null;
-            console.log('MySQL connection pool closed');
-        } catch (error) {
-            console.error('Error closing connection pool:', error.message);
-        }
-    }
-}
-
-process.on('SIGINT', async () => {
-    console.log('Shutting down gracefully...');
-    await closeConnectionPool();
-    process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-    console.log('Shutting down gracefully...');
-    await closeConnectionPool();
-    process.exit(0);
-});
 
 const server = new McpServer({
     name: 'Mysql Server MCP',
@@ -93,7 +36,7 @@ server.registerTool('listTables', {
     description: 'Lists all tables in the MySQL database',
 }, async () => {
     try {
-        const tables = await executeQuery('SHOW TABLES');
+        const [tables] = await connectionPool.query('SHOW TABLES');
         return {
             content: [{
                 type: 'text',
@@ -105,6 +48,36 @@ server.registerTool('listTables', {
             content: [{
                 type: 'text',
                 text: `Error listing tables: ${error.message}`
+            }],
+            isError: true
+        };
+    }
+});
+
+server.registerTool('executeQuery', {
+    title: 'Execute Query',
+    description: 'Executes a SQL query against the MySQL database',
+    inputSchema: {
+        statement: z.string(),
+        params: z.array(z.any()).optional()
+    }
+}, async ({ statement, params = [] }) => {
+    try {
+        const [results, fields] = await connectionPool.query(statement, params);
+        return {
+            content: [{
+                type: 'text',
+                text: `Query executed successfully. Results:\n${JSON.stringify(results, null, 2)}`
+            }],
+            metadata: {
+                fields: fields ? fields.map(field => field.name) : []
+            }
+        };
+    } catch (error) {
+        return {
+            content: [{
+                type: 'text',
+                text: `Error executing query: ${error.message}`
             }],
             isError: true
         };
