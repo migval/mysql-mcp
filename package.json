@@ -1,0 +1,15 @@
+{
+  "name": "mysql-mcp",
+  "version": "1.0.0",
+  "description": "Mysql MCP for operate to latest versions of mysql",
+  "main": "/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.16.0",
+    "mysql2": "^3.14.2"
+  }
+}
