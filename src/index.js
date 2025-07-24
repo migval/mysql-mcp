@@ -59,8 +59,8 @@ server.registerTool('executeQuery', {
     title: 'Execute Query',
     description: 'Executes a SQL query against the MySQL database',
     inputSchema: {
-        statement: z.string(),
-        params: z.array(z.any()).optional()
+        statement: z.string().describe('The SQL statement to execute'),
+        params: z.array(z.any()).optional().describe('Optional parameters for the SQL statement')
     }
 }, async ({ statement, params = [] }) => {
     try {
